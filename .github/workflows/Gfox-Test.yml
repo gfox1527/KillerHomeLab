@@ -1,0 +1,72 @@
+# File: .github/workflows/Gfox-Test.yml
+
+env:
+  NamingConvention: "AO"
+  ResourceGroup1Name: "4d1e63b7-e548-4e3b-bee7-e6fe9a865ffe"
+  PrdSubscription: ""
+  StgSubscription: ""
+  DevSubscription: ""
+  LabSubscription: ""
+  VdiSubscription: ""
+  Vnet1ID: "10.1"
+  Location1:   "EastUS2"
+
+name: 'Gfox-Test'
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  infrastructure:
+    name: 'Deploy Infrastructure'
+    runs-on: windows-latest
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v2 
+
+    - name: Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.GELVADE_PRD }}
+        enable-AzPSSession: true
+
+    - name: Create Resource Group
+      uses: Azure/powershell@v1
+      with:
+        inlineScript: |
+          $RGCheck = Get-AzResourceGroup -Name "${{env.ResourceGroup1Name}}" -ErrorAction 0
+          IF ($RGCheck -eq $Null) {New-AzResourceGroup -Name "${{env.ResourceGroup1Name}}" -Location "${{env.Location1}}"}
+        azPSVersion: 3.1.0 
+
+    - name: 'Deploy VNet'
+      uses: azure/arm-deploy@v1
+      with:
+        deploymentname: 'DeployVNet1'
+        subscriptionId: "${{env.PrdSubScription}}"
+        resourceGroupName: "${{env.ResourceGroup1Name}}"
+        template: 1-Forest_1-DomainController_1-Workstation/nestedtemplates/vnet.json   
+        parameters:  
+          vnetName="${{env.NamingConvention}}-VNet1"
+          vnetprefix="${{env.Vnet1ID}}.0.0/16"
+          subnet1Name="${{env.NamingConvention}}-VNet1-Subnet1"
+          subnet1Prefix="${{env.Vnet1ID}}.1.0/24"
+          subnet2Name="${{env.NamingConvention}}-VNet1-Subnet2"
+          subnet2Prefix="${{env.Vnet1ID}}.2.0/24"  
+          BastionsubnetPrefix="${{env.Vnet1ID}}.253.0/24"  
+          location="${{env.Location1}}"
+
+    - name: 'Deploy Bastion Host1'
+      uses: azure/arm-deploy@v1
+      with:
+        deploymentname: 'DeployBastion1'
+        subscriptionId: "${{env.PrdSubScription}}"
+        resourceGroupName: "${{env.ResourceGroup1Name}}"
+        template: 1-Forest_1-DomainController_1-Workstation/nestedtemplates/bastionhost.json   
+        parameters:  
+          publicIPAddressName="${{env.NamingConvention}}-VNet1-Bastion-pip"
+          AllocationMethod="Static"
+          vnetName="${{env.NamingConvention}}-VNet1"          
+          subnetName="AzureBastionSubnet"
+          location="${{env.Location1}}"                     
